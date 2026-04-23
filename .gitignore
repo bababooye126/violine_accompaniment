@@ -1,0 +1,6 @@
+venv/
+.venv/
+checkpoints/
+outputs/
+__pycache__/
+Data/

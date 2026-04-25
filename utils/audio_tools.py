@@ -4,6 +4,7 @@ import pretty_midi
 import numpy as np
 import torch
 from utils.midi_tools import encode_roll
+import os
 
 
 def extract_musaic_features(wav_path, midi_path, fs=8):
@@ -55,3 +56,35 @@ def extract_musaic_features_autoregressive(wav_path, midi_path, fs=8):
     x_combined = torch.cat([v_features, machine_context], dim=-1)
     
     return x_combined, p_targets, raw_data['x_stft'][:min_len]
+
+
+
+def get_validated_pairs(dataset_dir):
+    """
+    Pairs .wav and .mid files assuming they have exactly identical base names.
+    (e.g., 'track_01.wav' and 'track_01.mid')
+    """
+    files = [f for f in os.listdir(dataset_dir) if not f.startswith('.')]
+    
+    # Isolate all WAV files
+    wav_files = sorted([f for f in files if f.endswith('.wav')])
+    paired_paths = []
+    
+    print("--- Dataset Audit ---")
+    
+    for wav in wav_files:
+        base_name = wav.replace('.wav', '')
+        expected_midi = f"{base_name}.mid"
+        
+        # Check if the exact MIDI match exists
+        if expected_midi in files:
+            wav_path = os.path.join(dataset_dir, wav)
+            midi_path = os.path.join(dataset_dir, expected_midi)
+            paired_paths.append((wav_path, midi_path))
+        else:
+            print(f"⚠️ Missing MIDI for: {wav}")
+            
+    print(f"Total WAVs evaluated: {len(wav_files)}")
+    print(f"✅ Successfully Paired: {len(paired_paths)}")
+    
+    return paired_paths

@@ -1,11 +1,12 @@
 import torch
-from utils.audio_tools import extract_musaic_features_autoregressive
+from utils.audio_tools import extract_musaic_features_autoregressive,get_validated_pairs
 
 all_x = []      
 all_y = []    
 all_stft = []   
 
-print(f"🚀 Starting Autoregressive Feature Extraction for 60 pairs...")
+paired_paths = get_validated_pairs("Data/Dataset/Synthesized Piano-Violin Duet")
+print(f"🚀 Starting Autoregressive Feature Extraction for the pairs...")
 
 for wav, midi in paired_paths:
     try:

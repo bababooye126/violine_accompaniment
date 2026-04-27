@@ -30,7 +30,13 @@ GRAD_CLIP       = 0.5
 N_WARMUP        = 3           # Epochs where ONLY the critic trains
 CHECKPOINT_EVERY= 10
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+PATIENCE       = 8    # Stop if roughness doesn't improve for 8 epochs
+MIN_DELTA      = 0.005  # Minimum improvement to count as "better"
+ENTROPY_BETA_START = 0.005
+ENTROPY_BETA_END   = 0.0005
+ENTROPY_DECAY_START = 10   # Epoch to start decaying
 
+best_roughness = float('inf')
 DATASET_DIR     = "Data/Dataset/Synthesized Piano-Violin Duet"
 CHECKPOINT_DIR  = "checkpoints"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -112,6 +118,8 @@ def compute_gae(rewards, values, next_value):
 
 # ── Training loop ──────────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):
+    best_roughness  = float('inf')
+    patience_counter = 0
     model.train()
     warmup = epoch <= N_WARMUP
 
@@ -182,11 +190,18 @@ for epoch in range(1, EPOCHS + 1):
                 opt_critic.step()
 
                 # Actor only after warmup
+                
                 if not warmup:
-                    opt_actor.zero_grad()
-                    (a_loss + ENTROPY_BETA * e_loss).backward()
-                    nn.utils.clip_grad_norm_(actor_params, GRAD_CLIP)
-                    opt_actor.step()
+                    # Entropy schedule
+                   if epoch < ENTROPY_DECAY_START:
+                       entropy_beta = ENTROPY_BETA_START
+                   else:
+                       frac = min(1.0, (epoch - ENTROPY_DECAY_START) / (EPOCHS - ENTROPY_DECAY_START))
+                       entropy_beta = ENTROPY_BETA_START + frac * (ENTROPY_BETA_END - ENTROPY_BETA_START)
+                   opt_actor.zero_grad()
+                   (a_loss + entropy_beta * e_loss).backward()
+                   nn.utils.clip_grad_norm_(actor_params, GRAD_CLIP)
+                   opt_actor.step()
 
                 m_al.update(a_loss.item())
                 m_cl.update(c_loss.item())
@@ -211,9 +226,12 @@ for epoch in range(1, EPOCHS + 1):
         f"Critic L: {m_cl.mean():.4f}  "
         f"Entropy: {m_ent.mean():.4f}{tag}"
     )
+    
 
+    
+    
     if epoch % CHECKPOINT_EVERY == 0:
-        path = os.path.join(CHECKPOINT_DIR, f"musaic_rl_epoch_{epoch:03d}.pt")
+        path = os.path.join(CHECKPOINT_DIR, f"musaic_rl_epoch_outpute_ext{epoch:03d}.pt")
         torch.save({
             "epoch": epoch, "model_state": model.state_dict(),
             "opt_actor": opt_actor.state_dict(), "opt_critic": opt_critic.state_dict(),
@@ -221,5 +239,26 @@ for epoch in range(1, EPOCHS + 1):
             "mean_raw_reward": m_raw.mean(), "mean_roughness": m_rough.mean(),
         }, path)
         print(f"  💾 Checkpoint → {path}")
+    
+    
+    
+    if m_rough.mean() < best_roughness - MIN_DELTA:
+      best_roughness   = m_rough.mean()
+      patience_counter = 0
+      if m_rough.mean() < best_roughness:
+         best_roughness = m_rough.mean()
+         torch.save({
+             "epoch": epoch,
+             "model_state": model.state_dict(),
+             "mean_roughness": best_roughness,
+             "mean_raw_reward": m_raw.mean(),
+         }, os.path.join(CHECKPOINT_DIR, "musaic_rl_BEST.pt"))
+         print(f"  🎯 Best roughness: {best_roughness:.4f} → saved to musaic_rl_BEST.pt")
+    else:
+      patience_counter += 1
+      if patience_counter >= PATIENCE:
+        print(f"\n⏹ Early stopping at epoch {epoch} — roughness hasn't improved in {PATIENCE} epochs")
+        print(f"   Best roughness achieved: {best_roughness:.4f}")
+        break
 
 print("\n✅ Training complete.")

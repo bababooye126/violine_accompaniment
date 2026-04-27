@@ -51,7 +51,7 @@ DEVICE         = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 FS             = 8            # Must match training
 TEMPERATURE    = 0.8          # Inference sharpening (< 1 = safer)
 THRESHOLD      = 0.5          # Binary decode threshold after temperature scaling
-CHECKPOINT     = "checkpoints/musaic_rl_epoch_020.pt"   # ← Update as needed
+CHECKPOINT     = "checkpoints/musaic_BEST.pt"   # ← Update as needed
 OUTPUT_DIR     = "outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
